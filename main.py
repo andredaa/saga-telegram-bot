@@ -1,6 +1,7 @@
 import requests
 import re
 import time
+from datetime import datetime
 import json
 from bs4 import BeautifulSoup
 
@@ -18,16 +19,17 @@ def get_links_to_offers():
         return None
 
     links_to_offers = []
-    # split html into lines
-    for bytestring in html.split(b'  '):
-        string = str(bytestring)
 
-        # filter html for links to appartment offers
-        if re.search(r"\/objekt\/wohnungen\/\d*\.\d*.\d*", string):
-            url_to_offer = "https://saga.hamburg" + re.search(r"\/objekt\/wohnungen\/\d*\.\d*.\d*", string).group(0)
-            links_to_offers.append(url_to_offer)
+    soup = BeautifulSoup(html, "html.parser")
+    links = soup.find_all('a', class_='inner media',  href=True)
+
+    for link in links:
+        if "/objekt/wohnungen/" in link['href']:
+
+            links_to_offers.append("https://saga.hamburg" + link['href'])
 
     return links_to_offers
+
 
 
 def get_html_from_saga():
@@ -91,6 +93,7 @@ def post_to_telegram(link_to_offer, offer_title=''):
 if __name__ == "__main__":
 
     while True:
+        print("checking for updates ", datetime.now())
         offers = get_links_to_offers()
 
         for offer in offers:
