@@ -69,19 +69,22 @@ def post_to_telegram(link_to_offer, offer_title=''):
     chat_id = get_from_cfg("chat_id")
     send_title = 'https://api.telegram.org/bot' + token + '/sendMessage?chat_id=' + chat_id + '&parse_mode=Markdown&text=' + offer_title
     send_url = 'https://api.telegram.org/bot' + token + '/sendMessage?chat_id=' + chat_id + '&parse_mode=Markdown&text=' + link_to_offer
+    send_new_line_symbols = 'https://api.telegram.org/bot' + token + '/sendMessage?chat_id=' + chat_id + '&parse_mode=Markdown&text=' + "*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*"
 
-    for msg in [send_title, send_url, "*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*"]:
+    for msg in [send_title, send_url, send_new_line_symbols]:
         try:
             response = requests.get(msg)
             if not response.status_code == 200:
                 print("could not forward to telegram")
                 print("Error code", response.status_code)
                 return False
-        except requests.exceptions.RequestException:
-            print("could not forward to telegram" + str(link_to_offer))
+        except requests.exceptions.RequestException as e:
+            print("could not forward to telegram" + str(e))
+            print("this was the offer " + msg + " " + str(link_to_offer))
 
             return False
 
+    # only return True if the offer was sucessfully communicated to telegram
     return True
 
 
@@ -94,6 +97,7 @@ if __name__ == "__main__":
             if offer not in open("known_offers.txt").read().splitlines():
                 print("new offer", offer)
                 if post_to_telegram(offer, get_offer_title(offer)):
+                    # add offer to known offers, if sucessfully posted to telegram
                     file = open("known_offers.txt", "a+")
                     file.write(offer)
                     file.write("\n")
