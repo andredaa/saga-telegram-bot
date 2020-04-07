@@ -2,9 +2,10 @@ import requests
 import re
 import time
 import json
+from bs4 import BeautifulSoup
 
 
-def getFromCfg(key: str) -> str:
+def get_from_cfg(key: str) -> str:
     # import os#os.path.dirname(os.path.realpath(__file__)+
     with open("config.json") as file:
         js = json.load(file)
@@ -28,14 +29,15 @@ def get_links_to_offers():
 
     return links_to_offers
 
+
 def get_html_from_saga():
     post_address = "https://www.saga.hamburg/immobiliensuche"
     request_data = {
         "sort": "preis",
         "perpage": 30,
         "type": "wohnungen",
-        "rent_from": 500,
-        "rent_until": 600
+        "rent_from": 200,
+        "rent_until": 800
     }
 
     try:
@@ -52,22 +54,35 @@ def get_html_from_saga():
         return ""
 
 
-def post_to_telegram(link_to_offer):
-    token = getFromCfg("telegram_token")
-    chat_id = getFromCfg("chat_id")
-    send_text = 'https://api.telegram.org/bot' + token + '/sendMessage?chat_id=' + chat_id + '&parse_mode=Markdown&text=' + link_to_offer
+def get_offer_title(link_to_offer):
+    get_url = requests.get(link_to_offer)
+    get_text = get_url.text
+    soup = BeautifulSoup(get_text, "html.parser")
 
-    try:
-        response = requests.get(send_text)
-        if not response.status_code == 200:
-            print("could not forward to telegram")
-            print("Error code", response.status_code)
+    title = soup.find_all('h1', class_='h3 ft-bold', limit=1)[0]
+
+    return title.text
+
+
+def post_to_telegram(link_to_offer, offer_title=''):
+    token = get_from_cfg("telegram_token")
+    chat_id = get_from_cfg("chat_id")
+    send_title = 'https://api.telegram.org/bot' + token + '/sendMessage?chat_id=' + chat_id + '&parse_mode=Markdown&text=' + offer_title
+    send_url = 'https://api.telegram.org/bot' + token + '/sendMessage?chat_id=' + chat_id + '&parse_mode=Markdown&text=' + link_to_offer
+
+    for msg in [send_title, send_url, "*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*"]:
+        try:
+            response = requests.get(msg)
+            if not response.status_code == 200:
+                print("could not forward to telegram")
+                print("Error code", response.status_code)
+                return False
+        except requests.exceptions.RequestException:
+            print("could not forward to telegram" + str(link_to_offer))
+
             return False
-        else:
-            return True
-    except requests.exceptions.RequestException:
-        print("could not forward to telegram" + str(link_to_offer))
-        return False
+
+    return True
 
 
 if __name__ == "__main__":
@@ -78,7 +93,7 @@ if __name__ == "__main__":
         for offer in offers:
             if offer not in open("known_offers.txt").read().splitlines():
                 print("new offer", offer)
-                if post_to_telegram(offer):
+                if post_to_telegram(offer, get_offer_title(offer)):
                     file = open("known_offers.txt", "a+")
                     file.write(offer)
                     file.write("\n")
@@ -86,5 +101,3 @@ if __name__ == "__main__":
 
         # check every 5 minutes
         time.sleep(300)
-
-
