@@ -98,16 +98,9 @@ def send_msg_to_telegram(msg):
 if __name__ == "__main__":
 
     send_msg_to_telegram("Bot started at " + str(datetime.now()))
-    it = 0
 
     while True:
         print("checking for updates ", datetime.now())
-
-        # send heartbeat every 30 iterations
-        if it == 30:
-            send_msg_to_telegram("i am still alive.")
-            it = 0
-
         offers = get_links_to_offers()
 
         for offer in offers:
@@ -123,4 +116,3 @@ if __name__ == "__main__":
 
         # check every 5 minutes
         time.sleep(300)
-        it += 1
