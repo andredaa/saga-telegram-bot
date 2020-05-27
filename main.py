@@ -15,7 +15,7 @@ def get_from_cfg(key: str) -> str:
 def get_links_to_offers():
     html = get_html_from_saga()
     if html == "":
-        return None
+        return []
 
     links_to_offers = []
 
