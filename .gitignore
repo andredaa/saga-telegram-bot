@@ -2,3 +2,6 @@ config.json
 .idea
 venv
 known_offers.txt
+
+
+__pycache__/

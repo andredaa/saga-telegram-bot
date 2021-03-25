@@ -3,6 +3,8 @@ import time
 from datetime import datetime
 import json
 from bs4 import BeautifulSoup
+import re
+from whitelist import get_whitelist
 
 
 def get_from_cfg(key: str) -> str:
@@ -95,6 +97,29 @@ def send_msg_to_telegram(msg):
     return True
 
 
+def add_offer_to_known_offers(offer):
+    file = open("known_offers.txt", "a+")
+    file.write(offer)
+    file.write("\n")
+    file.close()
+
+
+def is_offer_location_in_whitelist(link_to_offer):
+    get_url = requests.get(link_to_offer)
+    get_text = get_url.text
+    soup = BeautifulSoup(get_text, "html.parser")
+
+    address = soup.find_all('', class_='ft-semi', limit=1)[0]  # address is in "ft-semi" class
+    zipcode = int(re.findall('\d{5}', str(address))[0])  # find zipcode by regex for 5digits
+
+    print(link_to_offer, zipcode)
+
+    if zipcode in get_whitelist():
+        return True
+
+    return False
+
+
 if __name__ == "__main__":
 
     send_msg_to_telegram("Bot started at " + str(datetime.now()))
@@ -105,14 +130,14 @@ if __name__ == "__main__":
 
         for offer in offers:
             if offer not in open("known_offers.txt").read().splitlines():
-                print("new offer", offer)
-                # add offer to known offers, if sucessfully posted to telegram
-                send_msg_to_telegram("*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*")
-                if post_offer_to_telegram(offer, get_offer_title(offer)) == [True, True]:
-                    file = open("known_offers.txt", "a+")
-                    file.write(offer)
-                    file.write("\n")
-                    file.close()
+                if is_offer_location_in_whitelist(offer):
+                    print("new offer", offer)
+                    # add offer to known offers, if sucessfully posted to telegram
+                    send_msg_to_telegram("*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*")
+                    if post_offer_to_telegram(offer, get_offer_title(offer)) == [True, True]:
+                        add_offer_to_known_offers(offer)
+            else:
+                add_offer_to_known_offers(offer)
 
         # check every 5 minutes
         time.sleep(300)
