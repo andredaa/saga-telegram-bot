@@ -115,6 +115,7 @@ def is_offer_location_in_whitelist(link_to_offer):
     print(link_to_offer, zipcode)
 
     if zipcode in get_whitelist():
+        print("zipcode in whitelist", zipcode)
         return True
 
     return False
