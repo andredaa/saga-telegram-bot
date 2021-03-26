@@ -98,6 +98,7 @@ def send_msg_to_telegram(msg):
 
 
 def add_offer_to_known_offers(offer):
+    print("adding offer to known offers")
     file = open("known_offers.txt", "a+")
     file.write(offer)
     file.write("\n")
@@ -109,14 +110,21 @@ def is_offer_location_in_whitelist(link_to_offer):
     get_text = get_url.text
     soup = BeautifulSoup(get_text, "html.parser")
 
-    address = soup.find_all('', class_='ft-semi', limit=1)[0]  # address is in "ft-semi" class
-    zipcode = int(re.findall('\d{5}', str(address))[0])  # find zipcode by regex for 5digits
+    print(soup)
 
-    print(link_to_offer, zipcode)
+    address = soup.find_all('p', class_='ft-semi', limit=1)  # address is in "ft-semi" class
+    if address:
+        zipcode = int(re.findall('\d{5}', str(address[0]))[0])  # find zipcode by regex for 5digits
+        print(link_to_offer, zipcode)
 
-    if zipcode in get_whitelist():
-        print("zipcode in whitelist", zipcode)
-        return True
+        if zipcode in get_whitelist():
+            print("zipcode in whitelist", zipcode)
+            return True
+        else:
+            print("zipcode not in whitelist")
+            return False
+
+    print("could not find address in link ", link_to_offer)
 
     return False
 
@@ -137,8 +145,8 @@ if __name__ == "__main__":
                     send_msg_to_telegram("*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*")
                     if post_offer_to_telegram(offer, get_offer_title(offer)) == [True, True]:
                         add_offer_to_known_offers(offer)
-            else:
-                add_offer_to_known_offers(offer)
+                else:
+                    add_offer_to_known_offers(offer)
 
         # check every 5 minutes
         time.sleep(300)
