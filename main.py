@@ -187,10 +187,10 @@ if __name__ == "__main__":
 
     chat_ids = get_value_from_config(["chats"]).keys()
 
-    while True:
-        for chat_id in chat_ids:
-            send_msg_to_telegram("Bot started at " + str(datetime.now()), chat_id)
+    for chat_id in chat_ids:
+        send_msg_to_telegram("Bot started at " + str(datetime.now()), chat_id)
 
+    while True:
         print("checking for updates ", datetime.now())
         current_offers = get_links_to_offers()
 
