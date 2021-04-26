@@ -4,14 +4,24 @@ from datetime import datetime
 import json
 from bs4 import BeautifulSoup
 import re
-from whitelist import get_whitelist
 
 
-def get_from_cfg(key: str) -> str:
-    # import os#os.path.dirname(os.path.realpath(__file__)+
+# gets a values from a nested object
+def get_value_from_config(path):
+
     with open("config.json") as file:
-        js = json.load(file)
-        return js[key]
+        config_json = json.load(file)
+
+    data = config_json
+
+    for prop in path:
+        if len(prop) == 0:
+            continue
+        if prop.isdigit():
+            prop = int(prop)
+        data = data[prop]
+
+    return data
 
 
 def get_links_to_offers():
@@ -35,10 +45,8 @@ def get_html_from_saga():
     post_address = "https://www.saga.hamburg/immobiliensuche"
     request_data = {
         "sort": "preis",
-        "perpage": 30,
-        "type": "wohnungen",
-        "rent_from": 200,
-        "rent_until": 800
+        "perpage": 100,
+        "type": "wohnungen"
     }
 
     try:
@@ -56,28 +64,30 @@ def get_html_from_saga():
 
 
 def get_offer_title(link_to_offer):
-    get_url = requests.get(link_to_offer)
-    get_text = get_url.text
-    soup = BeautifulSoup(get_text, "html.parser")
+    try:
+        get_url = requests.get(link_to_offer)
+        get_text = get_url.text
+        soup = BeautifulSoup(get_text, "html.parser")
 
-    title = soup.find_all('h1', class_='h3 ft-bold', limit=1)[0]
+        title = soup.find_all('h1', class_='h3 ft-bold', limit=1)[0]
 
-    return title.text
+        return title.text
 
-
-def post_offer_to_telegram(link_to_offer, offer_title=''):
-    sucessfully_sent = []
-
-    for msg in [link_to_offer, offer_title]:
-        success = send_msg_to_telegram(msg)
-        sucessfully_sent.append(success)
-
-    return sucessfully_sent
+    except:
+        return ' '
 
 
-def send_msg_to_telegram(msg):
-    token = get_from_cfg("telegram_token")
-    chat_id = get_from_cfg("chat_id")
+# posts all information about an offer to telegram
+def post_offer_to_telegram(link_to_offer, chat_id):
+    send_msg_to_telegram("*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*", chat_id)
+    for msg in [link_to_offer, get_offer_title(link_to_offer)]:
+        send_msg_to_telegram(msg, chat_id)
+
+
+
+# sends a message to a telegram chat
+def send_msg_to_telegram(msg, chat_id):
+    token = get_value_from_config(["telegram_token"])
 
     msg = 'https://api.telegram.org/bot' + token + '/sendMessage?chat_id=' + chat_id + '&parse_mode=Markdown&text=' + msg
 
@@ -91,10 +101,6 @@ def send_msg_to_telegram(msg):
         print("could not forward to telegram" + str(e))
         print("this was the message I tried to send: " + msg)
 
-        return False
-
-    # only return True if the message was sucessfully communicated to telegram
-    return True
 
 
 def add_offer_to_known_offers(offer):
@@ -105,19 +111,13 @@ def add_offer_to_known_offers(offer):
     file.close()
 
 
-def is_offer_location_in_whitelist(link_to_offer):
-    get_url = requests.get(link_to_offer)
-    get_text = get_url.text
-    soup = BeautifulSoup(get_text, "html.parser")
+def is_offer_zipcode_in_whitelist(offer_soup, whitelisted_zipcodes:[int], link_to_offer):
 
-    print(soup)
-
-    address = soup.find_all('p', class_='ft-semi', limit=1)  # address is in "ft-semi" class
+    address = offer_soup.find_all('p', class_='ft-semi', limit=1)  # address is in "ft-semi" class
     if address:
         zipcode = int(re.findall('\d{5}', str(address[0]))[0])  # find zipcode by regex for 5digits
-        print(link_to_offer, zipcode)
 
-        if zipcode in get_whitelist():
+        if zipcode in whitelisted_zipcodes:
             print("zipcode in whitelist", zipcode)
             return True
         else:
@@ -129,24 +129,82 @@ def is_offer_location_in_whitelist(link_to_offer):
     return False
 
 
+def is_offer_rent_below_max(offer_soup, max_rent) -> bool:
+    rent_string = offer_soup.find("dt",text="Gesamtmiete").findNext("dd").string
+    rent = rent_string.replace('€', '').replace(' ', '').replace(',', '.')
+
+    print(rent)
+
+    if float(rent) <= max_rent:
+        return True
+
+    return False
+
+
+def is_offer_rooms_above_min_rooms(offer_soup, min_rooms) -> bool:
+    rooms_string = offer_soup.find("dt",text="Zimmer").findNext("dd").string
+    rooms = int(rooms_string)
+
+    if rooms >= min_rooms:
+        return True
+
+    return False
+
+
+# checks if the offer meets the criteria for this chat
+def offer_meets_chat_criteria(link_to_offer, chat_id) -> bool:
+    criteria = get_value_from_config(["chats", chat_id, "criteria"])
+    print(criteria)
+
+    zipcode_whitelist = criteria["zipcode_whitelist"]
+
+    get_url = requests.get(link_to_offer)
+    get_text = get_url.text
+    offer_soup = BeautifulSoup(get_text, "html.parser")
+
+    rent_until = criteria["rent_until"]
+    print("max_rent", rent_until)
+    if not is_offer_rent_below_max(offer_soup, max_rent=rent_until):
+        print("rent too high")
+        return False
+
+    min_rooms = criteria["min_rooms"]
+    print("min_rooms", min_rooms)
+    if not is_offer_rooms_above_min_rooms(offer_soup, min_rooms=min_rooms):
+        print("not enough rooms")
+        return False
+
+    # check if zipcode is in zipcode whitelist
+    if zipcode_whitelist and not is_offer_zipcode_in_whitelist(offer_soup, zipcode_whitelist, link_to_offer):
+        print("Offer not in zipcode whitelist")
+        return False
+
+    # all criteria matched
+    return True
+
+
 if __name__ == "__main__":
 
-    send_msg_to_telegram("Bot started at " + str(datetime.now()))
+    chat_ids = get_value_from_config(["chats"]).keys()
 
     while True:
+        for chat_id in chat_ids:
+            send_msg_to_telegram("Bot started at " + str(datetime.now()), chat_id)
+
         print("checking for updates ", datetime.now())
-        offers = get_links_to_offers()
+        current_offers = get_links_to_offers()
 
-        for offer in offers:
+        for offer in current_offers:
             if offer not in open("known_offers.txt").read().splitlines():
-                if is_offer_location_in_whitelist(offer):
-                    print("new offer", offer)
-                    # add offer to known offers, if sucessfully posted to telegram
-                    send_msg_to_telegram("*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*")
-                    if post_offer_to_telegram(offer, get_offer_title(offer)) == [True, True]:
-                        add_offer_to_known_offers(offer)
-                else:
-                    add_offer_to_known_offers(offer)
+                print("new offer", offer)
+                # for each chat: send offer to telegram, if it meets the chat's criteria
+                for chat_id in chat_ids:
+                    if offer_meets_chat_criteria(offer, chat_id):
+                        # if there is a whitelist for this chat: Post offer only if location is in whitelist
+                        post_offer_to_telegram(offer, chat_id)
 
-        # check every 5 minutes
-        time.sleep(300)
+                # finally add to known offers
+                add_offer_to_known_offers(offer)
+
+        # check every 3 minutes
+        time.sleep(180)

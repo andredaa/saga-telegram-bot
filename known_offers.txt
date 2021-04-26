@@ -62,3 +62,10 @@ https://saga.hamburg/objekt/wohnungen/8140.0354.2000
 https://saga.hamburg/objekt/wohnungen/7430.0008.2000
 https://saga.hamburg/objekt/wohnungen/35001.0325.2100
 https://saga.hamburg/objekt/wohnungen/35001.0579.2100
+https://saga.hamburg/objekt/wohnungen/6228.0056.2000
+https://saga.hamburg/objekt/wohnungen/7188.0007.2000
+https://saga.hamburg/objekt/wohnungen/7192.0055.2000
+https://saga.hamburg/objekt/wohnungen/7095.0002.2000
+https://saga.hamburg/objekt/wohnungen/35001.0012.2100
+https://saga.hamburg/objekt/wohnungen/7061.0013.2000
+https://saga.hamburg/objekt/wohnungen/7035.0004.2000
