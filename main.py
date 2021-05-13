@@ -130,10 +130,13 @@ def is_offer_zipcode_in_whitelist(offer_soup, whitelisted_zipcodes:[int], link_t
 
 
 def is_offer_rent_below_max(offer_soup, max_rent) -> bool:
+    # Example rent_string 1.002,68 €
     rent_string = offer_soup.find("dt",text="Gesamtmiete").findNext("dd").string
-    rent = rent_string.replace('€', '').replace(' ', '').replace(',', '.')
+    rent_string = rent_string.replace('€', '').replace(' ', '')
+    rent_string = rent_string.split(',')[0]  # ignore cents
+    rent = rent_string.replace('.', '')  # replace 1.000 to be 1000
 
-    print(rent)
+    print("rent", rent, max_rent)
 
     if float(rent) <= max_rent:
         return True
@@ -143,7 +146,13 @@ def is_offer_rent_below_max(offer_soup, max_rent) -> bool:
 
 def is_offer_rooms_above_min_rooms(offer_soup, min_rooms) -> bool:
     rooms_string = offer_soup.find("dt",text="Zimmer").findNext("dd").string
-    rooms = int(rooms_string)
+
+    try:
+        rooms = int(rooms_string)
+    except ValueError:
+        # invalid literal for int() with base 10: '2 1/2'  there is "half rooms"
+        rooms_string = rooms_string.split(" ")[0]
+        rooms = int(rooms_string)
 
     if rooms >= min_rooms:
         return True
