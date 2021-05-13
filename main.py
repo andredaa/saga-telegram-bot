@@ -188,7 +188,8 @@ if __name__ == "__main__":
     chat_ids = get_value_from_config(["chats"]).keys()
 
     for chat_id in chat_ids:
-        send_msg_to_telegram("Bot started at " + str(datetime.now()), chat_id)
+        if get_value_from_config(["chats", chat_id, "debug_group"]):
+            send_msg_to_telegram("Bot started at " + str(datetime.now()), chat_id)
 
     while True:
         print("checking for updates ", datetime.now())
