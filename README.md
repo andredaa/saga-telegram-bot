@@ -5,7 +5,8 @@ This bot sends messages to telegram if new offers for apartment are posted on ht
 ## Make your own saga-telegram-bot
 
 Create a telegram bot and add it to a group.
-Get your telegram token and chat id.
+Get your telegram token and chat id(s).
+You can create multiple chats with different criteria, each specified in the config.json
 Put them into a file called config.json, place it in the project dir. See config.json.example
 
 __Example conf entry__
