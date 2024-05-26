@@ -7,6 +7,8 @@ import re
 
 from typing import List
 
+from zipcodes import get_neighborhoods_for_zipcode
+
 
 # gets a values from a nested object
 def get_value_from_config(path):
@@ -79,13 +81,23 @@ def get_offer_title(link_to_offer):
         return title.text
 
     except:
-        return ' '
+        return 'notitle '
 
 
 # posts all information about an offer to telegram
-def post_offer_to_telegram(link_to_offer, chat_id):
+def post_offer_to_telegram(offer_details, chat_id):
     send_msg_to_telegram("*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*", chat_id)
-    for msg in [link_to_offer, get_offer_title(link_to_offer)]:
+
+    def details_to_str(offer_details):
+        if zipcode := offer_details.get("zipcode", None):
+            neighborhoods = get_neighborhoods_for_zipcode(zipcode)
+            
+            return  f"Rent: {offer_details.get('rent')}€, Rooms: {offer_details.get('rooms', '?')}, Location: {offer_details.get('zipcode')} {', '.join(neighborhoods)}"
+        
+        return  f"Rent: {offer_details.get('rent')}€, Rooms: {offer_details.get('rooms', '?')}"
+
+
+    for msg in [details_to_str(offer_details), offer_details.get("link")]:
         send_msg_to_telegram(msg, chat_id)
 
 
@@ -100,7 +112,9 @@ def send_msg_to_telegram(msg, chat_id):
         response = requests.get(msg)
         if not response.status_code == 200:
             print("could not forward to telegram")
-            print("Error code", response.status_code)
+            print("Error code", response.status_code, response.text)
+            print(msg)
+            exit()
             return False
     except requests.exceptions.RequestException as e:
         print("could not forward to telegram" + str(e))
@@ -112,17 +126,18 @@ def is_offer_known(offer: str):
     return offer in open("known_offers.txt").read().splitlines()
 
 
-def add_offers_to_known_offers(offers: List[str]):
-    for offer in offers:
-        if not is_offer_known(offer):
-            print("adding offer to known offers")
-            file = open("known_offers.txt", "a+")
-            file.write(offer)
-            file.write("\n")
-            file.close()
+def add_offers_to_known_offers(offers: dict):
+    for offer_list in offers.values():
+        for link in offer_list:
+            if not is_offer_known(link):
+                print("adding offer to known offers")
+                file = open("known_offers.txt", "a+")
+                file.write(link)
+                file.write("\n")
+                file.close()
 
 
-def is_offer_zipcode_in_whitelist(offer_soup, whitelisted_zipcodes:[int], link_to_offer):
+def get_zipcode(offer_soup) -> int|None:
     zipcode = None
 
     text_xl_divs = offer_soup.find_all('div', class_='text-xl')  # address is in "text-xl" class
@@ -135,35 +150,29 @@ def is_offer_zipcode_in_whitelist(offer_soup, whitelisted_zipcodes:[int], link_t
                 break
 
     if not zipcode:
-        print("could not find address in link ", link_to_offer)
-        return False
+        return None
     
-    if zipcode in whitelisted_zipcodes:
-        print("zipcode in whitelist", zipcode)
-        return True
-    else:
-        print("zipcode not in whitelist")
-        return False
+    return zipcode
 
 
 
-def is_offer_rent_below_max(offer_soup, max_rent) -> bool:
+def get_rent(offer_soup) -> float:
     # Example rent_string 1.002,68 €
     rent_string = offer_soup.find("td", text="Gesamtmiete").findNext("td").string
     rent_string = rent_string.replace('€', '').replace(' ', '')
     rent_string = rent_string.split(',')[0]  # ignore cents
     rent = rent_string.replace('.', '')  # replace 1.000 to be 1000
 
-    print("rent", rent, max_rent)
-
-    if float(rent) <= max_rent:
-        return True
-
-    return False
+    return float(rent)
 
 
-def is_offer_rooms_above_min_rooms(offer_soup, min_rooms) -> bool:
-    rooms_string = offer_soup.find("td",string="Zimmer").findNext("td").string
+def get_rooms(offer_soup) -> int|None:
+    try:
+        rooms_string = offer_soup.find("td",string="Zimmer").findNext("td").string
+    except AttributeError:
+        # no info on rooms (happens for offices)
+        return None
+
 
     try:
         rooms = int(rooms_string)
@@ -172,10 +181,39 @@ def is_offer_rooms_above_min_rooms(offer_soup, min_rooms) -> bool:
         rooms_string = rooms_string.split(" ")[0]
         rooms = int(rooms_string)
 
-    if rooms >= min_rooms:
-        return True
+    return rooms
 
-    return False
+
+def get_offer_details(link:str) -> dict:
+    details = {
+        "rent": None,
+        "zipcode": None,
+        "rooms": None,
+        "link": link
+    }
+
+    # get details HTML
+    get_url = requests.get(link)
+
+    get_text = get_url.text
+    offer_soup = BeautifulSoup(get_text, "html.parser")
+
+    # get rent price
+    details["rent"] = get_rent(offer_soup)
+
+    # get rooms
+    details["rooms"] = get_rooms(offer_soup)
+    
+    # check if zipcode is in zipcode whitelist
+    details["zipcode"] = get_zipcode(offer_soup)
+    if not details["zipcode"]:
+        print(f"COULD NOT GET ADDRESS FOR LINK {link}")
+
+
+    return details
+
+        
+
 
 
 # checks if the offer meets the criteria for this chat
@@ -187,41 +225,36 @@ def offers_that_match_criteria(links_to_all_offers, chat_id) -> List[str]:
     # get only offers of matching category (e.g. "apartments")
     offers = links_to_all_offers.get(criteria.get("category", "apartments"))
 
-    for offer in offers:
-        if is_offer_known(offer):
+    for offer_link in offers:
+        if is_offer_known(offer_link):
             continue    
-        print("new offer", offer)
+        print("new offer", offer_link)
 
-        # get details HTML
-        get_url = requests.get(offer)
-        get_text = get_url.text
-        offer_soup = BeautifulSoup(get_text, "html.parser")
-        print(offer_soup.prettify())
+        offer_details = get_offer_details(offer_link)
 
         # check rent price
-        rent_until = criteria["rent_until"]
-        print("max_rent", rent_until)
-        if not is_offer_rent_below_max(offer_soup, max_rent=rent_until):
-            print("rent too high")
+        rent_until = criteria["rent_until"]       
+        if offer_details.get("rent", 0) > rent_until:
+            print(f"rent too high {offer_details.get('rent')}, {rent_until}")
             continue
 
         # check min rooms
         min_rooms = criteria.get("min_rooms", None)
-        if min_rooms:
-            print("min_rooms", min_rooms)
-            if not is_offer_rooms_above_min_rooms(offer_soup, min_rooms=min_rooms):
-                print("not enough rooms")
-                continue
+        if min_rooms and min_rooms > offer_details.get("rooms", 0):
+            print("not enough rooms")
+            continue
 
         # check if zipcode is in zipcode whitelist
         zipcode_whitelist = criteria["zipcode_whitelist"]
-        if zipcode_whitelist and is_offer_zipcode_in_whitelist(offer_soup, zipcode_whitelist, offer):
-
-            print("Offer not in zipcode whitelist")
-            continue
+        if zipcode_whitelist:
+            if zipcode:= offer_details.get("zipcode", None):
+                if zipcode not in zipcode_whitelist:
+                    print("Offer not in zipcode whitelist")
+                    continue
 
         # all criteria matched
-        matching_offers.append(offer)
+        print("matching offer found", offer_link)
+        matching_offers.append(offer_details)
 
     return matching_offers
 
