@@ -18,6 +18,7 @@ __Example conf entry__
         "-CHAT_ID_1": {
             "debug_group": false,
             "criteria": {
+              "category": "apartments",
               "min_rooms": 1,
               "rent_from": 200,
               "rent_until": 800,
@@ -32,7 +33,8 @@ __CHAT_ID_1__ --> your chat id; str;
 ___debug_group__ --> Error messages will be forwarded to this group; boolean; 
 
 __criteria__ 
-
+    - category --> choose 1 of "apartments", "offices", "parking"
+    
     - min_rooms -->  min room count ;  int; 
 
     - rent_from --> min rent in Euro ;  int; 
