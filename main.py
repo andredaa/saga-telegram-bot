@@ -1,3 +1,4 @@
+import urllib.request, urllib.error
 import requests
 import time
 from datetime import datetime
@@ -31,7 +32,8 @@ def get_value_from_config(path):
 def get_links_to_offers() -> dict:
     html = get_html_from_saga()
     if html == "":
-        return []
+        print("COULD NOT READ HTML FROM SAGA")
+        return {}
 
     all_links = []
 
@@ -57,16 +59,23 @@ def get_html_from_saga():
     
 
     try:
-        r = requests.get(post_address, headers={'Content-Type': 'application/json'})
-        if not r.status_code == 200:
-            print("could post to saga")
-            print("Error code", r.status_code)
+        req = urllib.request.Request(post_address)
+        req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:106.0) Gecko/20100101 Firefox/106.0')
+        req.add_header('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8')
+        req.add_header('Accept-Language', 'en-US,en;q=0.5')
+
+        r = urllib.request.urlopen(req)
+
+        if not r.code == 200:
+            print("could not post to saga")
+            print("Error code", r.code)
+            print("Error", r.reason)
             return ""
         else:
-            return r.content
+            return r.read().decode('utf-8')
 
-    except requests.exceptions.RequestException as e:
-        print("error while posting to saga" + str(e))
+    except urllib.error.HTTPError as e:
+        print("error while posting to saga " + str(e))
         return ""
 
 
@@ -193,9 +202,14 @@ def get_offer_details(link:str) -> dict:
     }
 
     # get details HTML
-    get_url = requests.get(link)
+    req = urllib.request.Request(link)
+    req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:106.0) Gecko/20100101 Firefox/106.0')
+    req.add_header('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8')
+    req.add_header('Accept-Language', 'en-US,en;q=0.5')
 
-    get_text = get_url.text
+    get_url = urllib.request.urlopen(req)
+
+    get_text = get_url.read().decode("utf-8")
     offer_soup = BeautifulSoup(get_text, "html.parser")
 
     # get rent price
@@ -223,7 +237,7 @@ def offers_that_match_criteria(links_to_all_offers, chat_id) -> List[str]:
     criteria = get_value_from_config(["chats", chat_id, "criteria"])
 
     # get only offers of matching category (e.g. "apartments")
-    offers = links_to_all_offers.get(criteria.get("category", "apartments"))
+    offers = links_to_all_offers.get(criteria.get("category", "apartments"), [])
 
     for offer_link in offers:
         if is_offer_known(offer_link):
