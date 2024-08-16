@@ -1,13 +1,13 @@
 {
-  "telegram_token": "YOUR_TOKEN",
+  "telegram_token": "7506935902:AAEBlNygLzjoAReJpIgbK7TsEgczdcbcAU8",
   "chats": {
-      "-CHAT_ID_1": {
+      "5486080778": {
         "debug_group": false,
         "criteria": {
           "category": "apartments",
-          "min_rooms": 1,
+          "min_rooms": 3,
           "rent_from": 200,
-          "rent_until": 800,
+          "rent_until": 1800,
           "zipcode_whitelist": [
             20359, 22765, 22767, 22769
           , 20257, 20357, 22765, 22769
