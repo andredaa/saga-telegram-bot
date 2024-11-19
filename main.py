@@ -10,6 +10,9 @@ from typing import List
 
 from zipcodes import get_neighborhoods_for_zipcode
 
+# If don't want this script to send anything to telegram,
+# set this to True.
+TEST_MODE = False
 
 # gets a values from a nested object
 def get_value_from_config(path):
@@ -56,7 +59,6 @@ def get_links_to_offers() -> dict:
 
 def get_html_from_saga():
     post_address = "https://www.saga.hamburg/immobiliensuche?Kategorie=APARTMENT"
-    
 
     try:
         req = urllib.request.Request(post_address)
@@ -100,11 +102,8 @@ def post_offer_to_telegram(offer_details, chat_id):
     def details_to_str(offer_details):
         if zipcode := offer_details.get("zipcode", None):
             neighborhoods = get_neighborhoods_for_zipcode(zipcode)
-            
             return  f"Rent: {offer_details.get('rent')}€, Rooms: {offer_details.get('rooms', '?')}, Location: {offer_details.get('zipcode')} {', '.join(neighborhoods)}"
-        
         return  f"Rent: {offer_details.get('rent')}€, Rooms: {offer_details.get('rooms', '?')}"
-
 
     for msg in [details_to_str(offer_details), offer_details.get("link")]:
         send_msg_to_telegram(msg, chat_id)
@@ -152,15 +151,15 @@ def get_zipcode(offer_soup) -> int|None:
     text_xl_divs = offer_soup.find_all('div', class_='text-xl')  # address is in "text-xl" class
     if text_xl_divs:
         for div in text_xl_divs:
-            print(div.string)
+            #print(div.string)
 
-            if zipcode_like_strings:=re.findall('\d{5}', str(div.string)):
+            if zipcode_like_strings:=re.findall('[0-9]{5}', str(div.string)):
                 zipcode = int(zipcode_like_strings[0])  # find zipcode by regex for 5digits
                 break
 
     if not zipcode:
         return None
-    
+
     return zipcode
 
 
@@ -178,17 +177,25 @@ def get_rent(offer_soup) -> float:
 def get_rooms(offer_soup) -> int|None:
     try:
         rooms_string = offer_soup.find("td",string="Zimmer").findNext("td").string
+        rooms_string = rooms_string.strip()
     except AttributeError:
         # no info on rooms (happens for offices)
         return None
 
-
+    # Seems like a nifty coder changed the room-number format
+    # within the new website...
     try:
         rooms = int(rooms_string)
     except ValueError:
-        # invalid literal for int() with base 10: '2 1/2'  there is "half rooms"
-        rooms_string = rooms_string.split(" ")[0]
-        rooms = int(rooms_string)
+        if ',' in rooms_string:
+            # We have a half room like 2,5
+            rooms = int(rooms_string.split(',')[0])
+        elif '1/2' in rooms_string:
+            # We have a half room like 2 1/2
+            rooms = int(rooms_string.split(' ')[0])
+        else:
+            print("! Invalid room: '" + rooms_string + "'")
+            return None
 
     return rooms
 
@@ -225,9 +232,6 @@ def get_offer_details(link:str) -> dict:
 
 
     return details
-
-        
-
 
 
 # checks if the offer meets the criteria for this chat
@@ -277,9 +281,10 @@ if __name__ == "__main__":
 
     chat_ids = get_value_from_config(["chats"]).keys()
 
-    for chat_id in chat_ids:
-        if get_value_from_config(["chats", chat_id, "debug_group"]):
-            send_msg_to_telegram("Bot started at " + str(datetime.now()), chat_id)
+    if not TEST_MODE:
+        for chat_id in chat_ids:
+            if get_value_from_config(["chats", chat_id, "debug_group"]):
+                send_msg_to_telegram("Bot started at " + str(datetime.now()), chat_id)
 
     while True:
         print("checking for updates ", datetime.now())
@@ -289,8 +294,9 @@ if __name__ == "__main__":
         for chat_id in chat_ids:
             matching_offers = offers_that_match_criteria(current_offers, chat_id)
 
-            for offer in matching_offers:
-                post_offer_to_telegram(offer, chat_id)
+            if not TEST_MODE:
+                for offer in matching_offers:
+                    post_offer_to_telegram(offer, chat_id)
 
         # finally add to known offers
         add_offers_to_known_offers(current_offers)
