@@ -1,4 +1,3 @@
-import urllib.request, urllib.error
 import requests
 import time
 from datetime import datetime
@@ -11,10 +10,10 @@ from zipcodes import get_neighborhoods_for_zipcode
 
 # If don't want this script to send anything to telegram,
 # set this to True.
-TEST_MODE = False
+TEST_MODE = True
 
 # Loglevel (logging.(DEBUG|INFO|WARNING|ERROR))
-LOG_LEVEL = logging.DEBUG
+LOG_LEVEL = logging.INFO
 
 # Logfile path (Set to None to disable file logging)
 LOG_FILE  = None #'log.txt'
@@ -22,9 +21,18 @@ LOG_FILE  = None #'log.txt'
 # Format of single logmessage
 LOG_FORMAT='[%(levelname)s] %(asctime)s %(message)s'
 
+# These HTTP headers are added when sending
+# requests to saga.
+HTTP_HDRS = {
+	'User-Agent' : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:106.0) Gecko/20100101 Firefox/106.0',
+	'Accept' : 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+	'Accept-Language' : 'en-US,en;q=0.5'
+}
 
-# gets a values from a nested object
+
 def get_value_from_config(path):
+	# Get config i
+	# gets a values from a nested object
 	with open("config.json") as file:
 		config_json = json.load(file)
 
@@ -63,24 +71,16 @@ def get_links_to_offers() -> dict:
 
 def get_html_from_saga():
 	url = "https://www.saga.hamburg/immobiliensuche?Kategorie=APARTMENT"
-
 	try:
-		req = urllib.request.Request(url)
-		req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:106.0) Gecko/20100101 Firefox/106.0')
-		req.add_header('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8')
-		req.add_header('Accept-Language', 'en-US,en;q=0.5')
-
-		resp = urllib.request.urlopen(req)
-
-		if not resp.code == 200:
+		resp = requests.get(url, headers=HTTP_HDRS)
+		if resp.status_code != 200:
 			logging.warning("Error receiving data from saga!")
-			logging.warning(">> " + str(resp.code) + " "\
+			logging.warning(">> " + str(resp.status_code) + " "\
 				 + resp.reason)
 			return None
-		else:
-			return resp.read().decode('utf-8')
+		else:	return resp.text
 
-	except urllib.error.HTTPError as e:
+	except requests.exceptions.RequestException as e:
 		logging.error("Error while getting request, " + str(e))
 		return None
 
@@ -95,8 +95,8 @@ def get_offer_title(link_to_offer):
 		return 'notitle '
 
 
-# posts all information about an offer to telegram
 def post_offer_to_telegram(offer_details, chat_id):
+	# posts all information about an offer to telegram
 	send_msg_to_telegram("*-"*31 + "*", chat_id)
 
 	def details_to_str(offer_details):
@@ -116,9 +116,8 @@ def post_offer_to_telegram(offer_details, chat_id):
 		send_msg_to_telegram(msg, chat_id)
 
 
-
-# sends a message to a telegram chat
 def send_msg_to_telegram(msg, chat_id):
+	# sends a message to a telegram chat
 	token = get_value_from_config(["telegram_token"])
 	msg = 'https://api.telegram.org/bot' + token\
 		 + '/sendMessage?chat_id=' + chat_id\
@@ -200,23 +199,20 @@ def get_rooms(offer_soup) -> int|None:
 	return rooms
 
 
-def get_offer_details(link:str) -> dict:
+def get_offer_details(url:str) -> dict:
 	details = {
 		"rent"    : None,
 		"zipcode" : None,
 		"rooms"   : None,
-		"link"    : link
+		"link"    : url
 	}
 
 	# get details HTML
-	req = urllib.request.Request(link)
-	req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:106.0) Gecko/20100101 Firefox/106.0')
-	req.add_header('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8')
-	req.add_header('Accept-Language', 'en-US,en;q=0.5')
-
-	get_url = urllib.request.urlopen(req)
-	get_text = get_url.read().decode("utf-8")
-	offer_soup = BeautifulSoup(get_text, "html.parser")
+	resp = requests.get(url, headers=HTTP_HDRS)
+	if resp.status_code != 200:
+		logging.error("! Failed to request '" + url + "'")
+		return {}
+	offer_soup = BeautifulSoup(resp.text, "html.parser")
 
 	# get rent price
 	details["rent"] = get_rent(offer_soup)
@@ -227,7 +223,7 @@ def get_offer_details(link:str) -> dict:
 	# check if zipcode is in zipcode whitelist
 	details["zipcode"] = get_zipcode(offer_soup)
 	if not details["zipcode"]:
-		logging.warning("Failed to get zipcode for offer: " + link)
+		logging.warning("Failed to get zipcode for offer: " + url)
 
 	return details
 
@@ -268,7 +264,10 @@ def offers_that_match_criteria(links_to_all_offers, chat_id) -> List[str]:
 				continue
 
 		# all criteria matched
-		logging.info("Found matching offer: " + offer_link)
+		logging.info("Found: {} rooms, {}€, zipcode={}"
+			.format(offer_details['rooms'],
+				offer_details['rent'],
+				offer_details['zipcode']))
 		matching_offers.append(offer_details)
 
 	return matching_offers
@@ -276,6 +275,8 @@ def offers_that_match_criteria(links_to_all_offers, chat_id) -> List[str]:
 
 if __name__ == "__main__":
 
+	if TEST_MODE:
+		print("Running in test mode!")
 	if LOG_FILE:
 		logging.basicConfig(level=LOG_LEVEL, filename=LOG_FILE,
 			format=LOG_FORMAT)
