@@ -5,14 +5,23 @@ from datetime import datetime
 import json
 from bs4 import BeautifulSoup
 import re
-
 from typing import List
-
+import logging
 from zipcodes import get_neighborhoods_for_zipcode
 
 # If don't want this script to send anything to telegram,
 # set this to True.
 TEST_MODE = False
+
+# Loglevel (logging.(DEBUG|INFO|WARNING|ERROR))
+LOG_LEVEL = logging.DEBUG
+
+# Logfile path (Set to None to disable file logging)
+LOG_FILE  = None #'log.txt'
+
+# Format of single logmessage
+LOG_FORMAT='[%(levelname)s] %(asctime)s %(message)s'
+
 
 # gets a values from a nested object
 def get_value_from_config(path):
@@ -34,13 +43,11 @@ def get_value_from_config(path):
 
 def get_links_to_offers() -> dict:
     html = get_html_from_saga()
-    if html == "":
-        print("COULD NOT READ HTML FROM SAGA")
-        return {}
+    if html == "": return {}
 
     all_links = []
-
     soup = BeautifulSoup(html, "html.parser")
+
     for link in soup.find_all('a'):
         # print(link.get('href'))
         if "/immobiliensuche/immo-detail/" in link.get("href", ""):
@@ -69,15 +76,14 @@ def get_html_from_saga():
         r = urllib.request.urlopen(req)
 
         if not r.code == 200:
-            print("could not post to saga")
-            print("Error code", r.code)
-            print("Error", r.reason)
+            logging.warning("Error receiving data from saga!")
+            logging.warning(">> " + str(r.code) + " " + r.reason)
             return ""
         else:
             return r.read().decode('utf-8')
 
     except urllib.error.HTTPError as e:
-        print("error while posting to saga " + str(e))
+        logging.error("Error while getting request, " + str(e))
         return ""
 
 
@@ -86,11 +92,8 @@ def get_offer_title(link_to_offer):
         get_url = requests.get(link_to_offer)
         get_text = get_url.text
         soup = BeautifulSoup(get_text, "html.parser")
-
         title = soup.find_all('h1', class_='h3 ft-bold', limit=1)[0]
-
         return title.text
-
     except:
         return 'notitle '
 
@@ -118,15 +121,17 @@ def send_msg_to_telegram(msg, chat_id):
 
     try:
         response = requests.get(msg)
-        if not response.status_code == 200:
-            print("could not forward to telegram")
-            print("Error code", response.status_code, response.text)
-            print(msg)
+        if response.status_code != 200:
+            logging.error("Could not forward to telegram api")
+            logging.error(">> " + str(response.status_code) + " "\
+				+ response.text)
+            logging.error(">> Sent msg: '" + msg + "'")
             exit()
             return False
     except requests.exceptions.RequestException as e:
-        print("could not forward to telegram" + str(e))
-        print("this was the message I tried to send: " + msg)
+        logging.error("Could not forward to telegram api")
+        logging.error(">> Error: " + str(e))
+        logging.error(">> Sent msg: '" + msg + "'")
 
 
 
@@ -138,7 +143,7 @@ def add_offers_to_known_offers(offers: dict):
     for offer_list in offers.values():
         for link in offer_list:
             if not is_offer_known(link):
-                print("adding offer to known offers")
+                logging.debug("Adding offer to known_offers.txt: " + link)
                 file = open("known_offers.txt", "a+")
                 file.write(link)
                 file.write("\n")
@@ -146,8 +151,6 @@ def add_offers_to_known_offers(offers: dict):
 
 
 def get_zipcode(offer_soup) -> int|None:
-    zipcode = None
-
     text_xl_divs = offer_soup.find_all('div', class_='text-xl')  # address is in "text-xl" class
     if text_xl_divs:
         for div in text_xl_divs:
@@ -155,12 +158,9 @@ def get_zipcode(offer_soup) -> int|None:
 
             if zipcode_like_strings:=re.findall('[0-9]{5}', str(div.string)):
                 zipcode = int(zipcode_like_strings[0])  # find zipcode by regex for 5digits
-                break
+                return zipcode
 
-    if not zipcode:
-        return None
-
-    return zipcode
+    return None
 
 
 
@@ -194,7 +194,7 @@ def get_rooms(offer_soup) -> int|None:
             # We have a half room like 2 1/2
             rooms = int(rooms_string.split(' ')[0])
         else:
-            print("! Invalid room: '" + rooms_string + "'")
+            logging.warning("Invalid number of rooms '" + rooms_string + "'")
             return None
 
     return rooms
@@ -224,12 +224,11 @@ def get_offer_details(link:str) -> dict:
 
     # get rooms
     details["rooms"] = get_rooms(offer_soup)
-    
+
     # check if zipcode is in zipcode whitelist
     details["zipcode"] = get_zipcode(offer_soup)
     if not details["zipcode"]:
-        print(f"COULD NOT GET ADDRESS FOR LINK {link}")
-
+        logging.warning("Failed to get zipcode for offer: " + link)
 
     return details
 
@@ -245,21 +244,22 @@ def offers_that_match_criteria(links_to_all_offers, chat_id) -> List[str]:
 
     for offer_link in offers:
         if is_offer_known(offer_link):
-            continue    
-        print("new offer", offer_link)
+            continue
 
+        logging.debug("New offer: " + offer_link)
         offer_details = get_offer_details(offer_link)
 
         # check rent price
-        rent_until = criteria["rent_until"]       
+        rent_until = criteria["rent_until"]
         if offer_details.get("rent", 0) > rent_until:
-            print(f"rent too high {offer_details.get('rent')}, {rent_until}")
+            logging.debug("Rent too high ({}, {})"\
+			.format(offer_details.get('rent'), rent_until))
             continue
 
         # check min rooms
         min_rooms = criteria.get("min_rooms", None)
         if min_rooms and min_rooms > offer_details.get("rooms", 0):
-            print("not enough rooms")
+            logging.debug("Not enough rooms")
             continue
 
         # check if zipcode is in zipcode whitelist
@@ -267,17 +267,22 @@ def offers_that_match_criteria(links_to_all_offers, chat_id) -> List[str]:
         if zipcode_whitelist:
             if zipcode:= offer_details.get("zipcode", None):
                 if zipcode not in zipcode_whitelist:
-                    print("Offer not in zipcode whitelist")
+                    logging.debug("Offer not in zipcode whitelist")
                     continue
 
         # all criteria matched
-        print("matching offer found", offer_link)
+        logging.info("Found matching offer: " + offer_link)
         matching_offers.append(offer_details)
 
     return matching_offers
 
 
 if __name__ == "__main__":
+
+    if LOG_FILE:
+        logging.basicConfig(level=LOG_LEVEL, filename=LOG_FILE,
+			format=LOG_FORMAT)
+    else: logging.basicConfig(level=LOG_LEVEL, format=LOG_FORMAT)
 
     chat_ids = get_value_from_config(["chats"]).keys()
 
@@ -287,10 +292,10 @@ if __name__ == "__main__":
                 send_msg_to_telegram("Bot started at " + str(datetime.now()), chat_id)
 
     while True:
-        print("checking for updates ", datetime.now())
+        logging.info("Checking for updates ...")
         current_offers = get_links_to_offers()
 
-        # for each chat: send offer to telegram, if it meets the chat's criteria        
+        # for each chat: send offer to telegram, if it meets the chat's criteria
         for chat_id in chat_ids:
             matching_offers = offers_that_match_criteria(current_offers, chat_id)
 
