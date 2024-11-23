@@ -31,11 +31,9 @@ HTTP_HDRS = {
 
 
 def get_value_from_config(path):
-	# Get config i
 	# gets a values from a nested object
 	with open("config.json") as file:
 		config_json = json.load(file)
-
 		data = config_json
 
 		for prop in path:
@@ -112,9 +110,15 @@ def post_offer_to_telegram(offer_details, chat_id):
 			.format(offer_details.get('rent'),
 				offer_details.get('rooms', '?'))
 
+	n = 0
 	for msg in [details_to_str(offer_details), offer_details.get("link")]:
+		n += 1
+#		logging.info("Send to chat: {}€, {}, {}"\
+#				.format(offer_details.get('rent'),
+#					offer_details.get('rooms', '?'),
+#					offer_details.get('zipcode')))
 		send_msg_to_telegram(msg, chat_id)
-
+	logging.info("Sent {} offers to group chat".format(n/2))
 
 def send_msg_to_telegram(msg, chat_id):
 	# sends a message to a telegram chat
@@ -290,6 +294,14 @@ if __name__ == "__main__":
 				send_msg_to_telegram("Bot started at " + str(datetime.now()), chat_id)
 
 	while True:
+
+		# We assume it's most likely to get updates between
+		# 7:00 and 22:00.
+		now = datetime.now()
+		if now.hour >= 22 or now.hour < 7:
+			time.sleep(600)
+			continue
+
 		logging.debug("Checking for updates ...")
 		current_offers = get_links_to_offers()
 
