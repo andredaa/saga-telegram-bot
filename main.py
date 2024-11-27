@@ -98,30 +98,28 @@ def post_offer_to_telegram(offer_details, chat_id):
 	send_msg_to_telegram("*-"*31 + "*", chat_id)
 
 	def details_to_str(offer_details):
-		if zipcode := offer_details.get("zipcode", None):
+		zipcode = offer_details.get("zipcode", None)
+		if not zipcode or not zipcode.isdigit():
+			return  "Rent: {}€, Rooms: {}"\
+				.format(offer_details.get('rent'),
+					offer_details.get('rooms', '?'))
+		else:
+			zipcode = int(zipcode)
 			neighborhoods = get_neighborhoods_for_zipcode(zipcode)
 			return "Rent: {}€, Rooms: {}, Location: {} {}"\
 				.format(offer_details.get('rent'),
 					offer_details.get('rooms', '?'),
-					offer_details.get('zipcode'),
-					', '.join(neighborhoods))
-
-		return  "Rent: {}€, Rooms: {}"\
-			.format(offer_details.get('rent'),
-				offer_details.get('rooms', '?'))
-
+					zipcode, '/'.join(neighborhoods))
 	n = 0
 	for msg in [details_to_str(offer_details), offer_details.get("link")]:
+		print(". sending [" + msg + "] ...")
 		n += 1
-#		logging.info("Send to chat: {}€, {}, {}"\
-#				.format(offer_details.get('rent'),
-#					offer_details.get('rooms', '?'),
-#					offer_details.get('zipcode')))
 		send_msg_to_telegram(msg, chat_id)
 	logging.info("Sent {} offers to group chat".format(n/2))
 
 def send_msg_to_telegram(msg, chat_id):
 	# sends a message to a telegram chat
+	if TEST_MODE: return
 	token = get_value_from_config(["telegram_token"])
 	msg = 'https://api.telegram.org/bot' + token\
 		 + '/sendMessage?chat_id=' + chat_id\
@@ -133,7 +131,6 @@ def send_msg_to_telegram(msg, chat_id):
 			logging.error(">> " + str(resp.status_code)\
 				+ " " + resp.text)
 			logging.error(">> Sent msg: '" + msg + "'")
-#			exit()
 
 	except requests.exceptions.RequestException as e:
 		logging.error("Could not forward to telegram api")
@@ -288,10 +285,9 @@ if __name__ == "__main__":
 
 	chat_ids = get_value_from_config(["chats"]).keys()
 
-	if not TEST_MODE:
-		for chat_id in chat_ids:
-			if get_value_from_config(["chats", chat_id, "debug_group"]):
-				send_msg_to_telegram("Bot started at " + str(datetime.now()), chat_id)
+	for chat_id in chat_ids:
+		if get_value_from_config(["chats", chat_id, "debug_group"]):
+			send_msg_to_telegram("Bot started at " + str(datetime.now()), chat_id)
 
 	while True:
 
@@ -309,9 +305,8 @@ if __name__ == "__main__":
 		for chat_id in chat_ids:
 			matching_offers = offers_that_match_criteria(current_offers, chat_id)
 
-			if not TEST_MODE:
-				for offer in matching_offers:
-					post_offer_to_telegram(offer, chat_id)
+			for offer in matching_offers:
+				post_offer_to_telegram(offer, chat_id)
 
 		# finally add to known offers
 		add_offers_to_known_offers(current_offers)
