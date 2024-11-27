@@ -1,5 +1,3 @@
-from typing import List
-
 zipcodes = {
 
     "Hamburg-Altstadt": [20095, 20099, 20457, 20459],
@@ -108,7 +106,7 @@ zipcodes = {
     "Cranz": [21129]
 }
 
-def get_neighborhoods_for_zipcode(zipcode: int)-> List[str]:
+def get_neighborhoods_for_zipcode(zipcode: int)-> list:
     matches = []
     for neighborhood in zipcodes.keys():
         if zipcode in zipcodes[neighborhood]:
