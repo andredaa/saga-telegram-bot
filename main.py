@@ -10,7 +10,7 @@ from zipcodes import get_neighborhoods_for_zipcode
 
 # If don't want this script to send anything to telegram,
 # set this to True.
-TEST_MODE = True
+TEST_MODE = False
 
 # Loglevel (logging.(DEBUG|INFO|WARNING|ERROR))
 LOG_LEVEL = logging.INFO
@@ -119,8 +119,10 @@ def post_offer_to_telegram(offer_details, chat_id):
 
 def send_msg_to_telegram(msg, chat_id):
 	# sends a message to a telegram chat
-	if TEST_MODE: return
-	token = get_value_from_config(["telegram_token"])
+	if TEST_MODE: 
+		return
+	
+	token = get_value_from_config(["chats", chat_id,"telegram_token"])
 	msg = 'https://api.telegram.org/bot' + token\
 		 + '/sendMessage?chat_id=' + chat_id\
 		 + '&parse_mode=Markdown&text=' + msg
