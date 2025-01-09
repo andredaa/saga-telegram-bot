@@ -160,7 +160,7 @@ def get_zipcode(offer_soup) -> int|None:
 		for div in text_xl_divs:
 			#print(div.string)
 			res = re.findall(r'\d{5}', str(div.string))
-			if res: return res[0]
+			if res: return int(res[0])
 	return None
 
 
