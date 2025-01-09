@@ -115,7 +115,7 @@ def post_offer_to_telegram(offer_details, chat_id):
 		print(". sending [" + msg + "] ...")
 		n += 1
 		send_msg_to_telegram(msg, chat_id)
-	logging.info("Sent {} offers to group chat".format(n/2))
+	logging.info(f"Sent {n} offers to group chat {chat_id}")
 
 def send_msg_to_telegram(msg, chat_id):
 	# sends a message to a telegram chat
