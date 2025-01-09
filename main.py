@@ -99,12 +99,11 @@ def post_offer_to_telegram(offer_details, chat_id):
 
 	def details_to_str(offer_details):
 		zipcode = offer_details.get("zipcode", None)
-		if not zipcode or not zipcode.isdigit():
+		if not zipcode:
 			return  "Rent: {}€, Rooms: {}"\
 				.format(offer_details.get('rent'),
 					offer_details.get('rooms', '?'))
 		else:
-			zipcode = int(zipcode)
 			neighborhoods = get_neighborhoods_for_zipcode(zipcode)
 			return "Rent: {}€, Rooms: {}, Location: {} {}"\
 				.format(offer_details.get('rent'),
